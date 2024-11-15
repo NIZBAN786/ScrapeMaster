@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Scraper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">Website Scraper</h1>
+            
+            <div class="space-y-4">
+                <div>
+                    <label for="url" class="block text-sm font-medium text-gray-700 mb-2">Website URL</label>
+                    <input 
+                        type="url" 
+                        id="url" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                        placeholder="https://example.com"
+                        required
+                    >
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button 
+                        onclick="startScraping()"
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition flex items-center"
+                        id="scrapeButton"
+                    >
+                        <span>Start Scraping</span>
+                    </button>
+                    <div id="loadingSpinner" class="hidden">
+                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                    </div>
+                </div>
+
+                <div id="status" class="hidden rounded-md p-4 mt-4"></div>
+            </div>
+
+            <div class="mt-8">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">Scraping History</h2>
+                <div id="history" class="space-y-2">
+                    <!-- History items will be added here -->
+                </div>
+            </div>
+
+            <div id="downloadSection" class="mt-8 hidden">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">Downloaded Files</h2>
+                <div class="bg-gray-50 p-4 rounded-md">
+                    <p class="text-sm text-gray-600 mb-3">Files are saved in: <span id="savedLocation" class="font-mono"></span></p>
+                    <button 
+                        onclick="downloadFiles()"
+                        class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md transition text-sm"
+                        id="downloadButton"
+                    >
+                        Download Files
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDownloadId = null;
+
+        async function startScraping() {
+            const urlInput = document.getElementById('url');
+            const button = document.getElementById('scrapeButton');
+            const spinner = document.getElementById('loadingSpinner');
+            const status = document.getElementById('status');
+            const downloadSection = document.getElementById('downloadSection');
+            
+            if (!urlInput.value) {
+                showStatus('Please enter a valid URL', 'error');
+                return;
+            }
+
+            button.disabled = true;
+            spinner.classList.remove('hidden');
+            showStatus('Scraping in progress...', 'info');
+
+            try {
+                const response = await fetch('http://localhost:3000/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: urlInput.value })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus('Website successfully downloaded!', 'success');
+                    currentDownloadId = data.downloadId;
+                    addToHistory(urlInput.value, data.directory);
+                    downloadSection.classList.remove('hidden');
+                    document.getElementById('savedLocation').textContent = data.directory;
+                } else {
+                    throw new Error(data.error || 'Failed to scrape website');
+                }
+            } catch (err) {
+                showStatus(`An error occurred: ${err.message}`, 'error');
+            } finally {
+                button.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function downloadFiles() {
+            if (!currentDownloadId) {
+                showStatus('No files available to download', 'error');
+                return;
+            }
+
+            const downloadButton = document.getElementById('downloadButton');
+            downloadButton.disabled = true;
+            downloadButton.textContent = 'Preparing Download...';
+
+            try {
+                window.location.href = `http://localhost:3000/download/${currentDownloadId}`;
+                showStatus('Download started!', 'success');
+            } catch (err) {
+                showStatus(`Download failed: ${err.message}`, 'error');
+            } finally {
+                downloadButton.disabled = false;
+                downloadButton.textContent = 'Download Files';
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.classList.remove('hidden', 'bg-green-100', 'bg-red-100', 'bg-blue-100');
+            status.classList.remove('text-green-700', 'text-red-700', 'text-blue-700');
+
+            switch(type) {
+                case 'success':
+                    status.classList.add('bg-green-100', 'text-green-700');
+                    break;
+                case 'error':
+                    status.classList.add('bg-red-100', 'text-red-700');
+                    break;
+                case 'info':
+                    status.classList.add('bg-blue-100', 'text-blue-700');
+                    break;
+            }
+
+            status.textContent = message;
+            status.classList.remove('hidden');
+        }
+
+        function addToHistory(url, directory) {
+            const history = document.getElementById('history');
+            const timestamp = new Date().toLocaleString();
+            
+            const historyItem = document.createElement('div');
+            historyItem.className = 'bg-gray-50 p-3 rounded-md';
+            historyItem.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <div class="flex-1">
+                        <div class="text-sm font-medium text-gray-800">${url}</div>
+                        <div class="text-xs text-gray-500">${timestamp}</div>
+                        <div class="text-xs text-gray-600 mt-1 font-mono">${directory}</div>
+                    </div>
+                    <div class="text-xs text-green-500 font-medium">Completed</div>
+                </div>
+            `;
+            
+            history.insertBefore(historyItem, history.firstChild);
+        }
+    </script>
+</body>
+</html>
